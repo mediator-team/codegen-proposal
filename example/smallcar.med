@@ -1,0 +1,80 @@
+from arduino.arduino import digitalWrite, analogWrite;
+
+typedef int -1023 .. 1023 init 0 as signedPWM;
+typedef enum {forward, backward, rotate_left, rotate_right, stop} as action;
+
+automaton <pinDirection:int, pinSpeed:int> engine (speed : in signedPWM) {
+    transitions {
+        !speed.reqRead -> speed.reqRead = true;
+        speed.reqRead && speed.reqWrite -> {
+            sync speed;
+            if (speed.value > 0) {
+                digitalWrite(pinDirection, 1);
+                analogWrite(pinSpeed, speed.value);
+            } else {
+                digitalWrite(pinDirection, 0);
+                analogWrite(pinSpeed, -speed.value);
+            }
+        }
+    }
+}
+
+
+automaton speeder (act: in action, motor_l, motor_r: out signedPWM) {
+    transitions {
+        (act.reqWrite != motor_l.reqWrite) -> {
+            motor_l.reqWrite = act.reqWrite;
+            motor_r.reqWrite = act.reqWrite;
+        }
+
+        ((motor_l.reqRead && motor_r.reqRead) != act.reqRead) -> act.reqRead = motor_l.reqRead && motor_r.reqRead;
+
+        act.reqRead && act.reqWrite -> {
+            sync act;
+            if (act.value == forward) {
+                motor_l.value = 80;
+                motor_r.value = 80;
+            } else if (act.value == backward) {
+
+            } else if (act.value == stop) {
+                motor_l.value = 0;
+                motor_r.value = 0;
+            }
+
+            sync motor_l, motor_r;
+        }
+    }
+}
+
+automaton <trigPin:int, echoPin:int> ultraSonicDist (dist: out double) {
+    transitions {
+        !dist.reqWrite -> dist.reqWrite = true;
+        dist.reqRead -> {
+            sync dist;
+        }
+    }
+}
+
+automaton controller (dist: in double init 0, act: out action) {
+    transitions {
+        !act.reqWrite -> act.reqWrite = true;
+        act.reqRead -> {
+            sync dist;
+            act.value = stop;
+            sync act;
+        }
+    }
+}
+
+system testbench() {
+    components {
+        m1 : engine<8, 9>;
+        m2 : engine<11, 10>;
+        c  : controller;
+    }
+
+    connections {
+        speeder(c.act, m1.speed, m2.speed);
+        ultraSonicDist<6,7>(c.dist);
+    }
+}
