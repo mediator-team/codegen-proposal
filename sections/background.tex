@@ -1,0 +1,185 @@
+\section{Background}
+\label{sec:background}
+
+\subsection{\lang{}}
+\label{subsec:mediator}
+\lang{} is a component-based modeling language proposed in \cite{LiFacsMediator2017}. As a hierarchical modeling language, \lang{} provides formalisms for both high-level \emph{system} layouts and low-level \emph{automata}-based behavior units. 
+
+As implied by the name, the language tries to provide a mediator through different language elements. For example, \emph{system}s are designed for software engineers who may have no background about formal methods, which makes it easier to construct software models with reliable components and connectors. On the other hand, these reliable components and connectors are supposed to be built using \emph{automata} by researchers who know formal methods well.
+
+Syntax tree of a typical \lang{} program is defined as follows.
+\begin{bnf}
+    \ntsym{program} ::=  (& \ntsym{typedef} | \ntsym{function} | \ntsym{automaton} | \ntsym{system})^*
+\end{bnf}
+
+\emph{Typedef}s are aliases for types. \emph{Function}s are definitions of custom (or \emph{native}, which will be interpreted later) functions. \emph{Automaton}s and \emph{system}s are the core modeling elements in \lang{}. They are also called \emph{entities} since they share the same declaration form. %More details of them are shown as follows.
+
+\smalltitle{Type System} \lang{} provides various data types that are widely used in different formal modeling languages and programming languages. These data types are categorized as \emph{primitive types} and \emph{composite types}, which are presented in Table \ref{table:primitivetypes} and \ref{table:compositetypes}, respectively. \footnote{Some notations in Table \ref{table:primitivetypes} and \ref{table:compositetypes} are slightly different from the original language proposal in \cite{LiFacsMediator2017} since both the tool and language are still being frequently updated.}
+
+\begin{table}
+    \caption{Primitive Data Types}
+    \label{table:primitivetypes}
+    \centering
+    \begin{tabular}{lcr}
+        \hline
+        Name & Declaration & Term Example \T\B \\
+        \hline
+        \T 
+        Integer & \texttt{int} & \texttt{-1,0,1} \\
+        Bounded Integer\hspace{0.5cm} & \texttt{int lowerBound .. upperBound}\hspace{0.5cm} & \texttt{-1,0,1} \\
+        Double & \texttt{double} & \texttt{0.1, 1E-3} \\
+        Boolean & \texttt{bool} & \texttt{true, false} \\
+        Character & \texttt{char} & \texttt{'a', 'b'} \\
+        \B Enumeration & \texttt{enum {item$_1$, ..., item$_n$}} & \texttt{enumname.item} \\
+        \hline
+    \end{tabular}
+\end{table}
+Table \ref{table:primitivetypes} shows the primitive types supported by \lang{}: \emph{integers and bounded integers, double values, boolean values, single characters} and \emph{finite enumerations}.
+\begin{table}
+    \caption{Composite Data Types (\texttt{T} denotes an arbitrary data type)}
+    \label{table:compositetypes}
+    \centering
+    \begin{tabular}{lr}
+        \hline
+        Name & Declaration \T\B \\
+        \hline
+        \T Tuple  & \texttt{(T$_1$,...,T$_n$) }\\
+        Union & \texttt{T$_1$|...|T$_n$ } \\
+        Array & \texttt{T [length]}\\
+        List & \texttt{T []} \\
+        Map & \texttt{map [T$_{key}$] T$_{value}$} \\
+        Struct\hspace{1cm} & \texttt{struct \{ field$_1$:T$_1$,..., field$_n$:T$_n$ \}} \\
+        \B Initialized & \texttt{T$_{base}$ init term} \\
+        \hline
+    \end{tabular}
+\end{table}
+
+Composite types are used to construct complex data types from simpler ones. Such composite patterns in Table \ref{table:compositetypes} are interpreted as follows:
+\begin{itemize}
+    \item \emph{Tuple}. The \emph{tuple} operator `,' can be used to construct a finite tuple type with several base types.
+    \item \emph{Union}. The \emph{union} operator `$|$' is designed to combine different types as a more complicated one. 
+    \item \emph{Array} and \emph{List}. An \emph{array} $T[n]$ is a finite ordered collection containing exactly $n$ elements of type $T$. Moreover, a \emph{list} is an array of which the capacity is not specified, i.e. a list is a dynamic array.
+    \item \emph{Map}. A \emph{map }[$T_{key}$] $T_{val}$ is a dictionary that maps a key of type $T_{key}$ to a value of type $T_{val}$.
+    \item \emph{Struct}. A \emph{struct }\{$field_1:T_1,\cdots,field_n:T_n$\} contains a finite number of fields, each has  a unique identifier $field_i$ and a particular type $T_i$.
+    \item \emph{Initialized}. An initialized type is used to specify the default value of a type $T_{base}$ with \texttt{term}.
+\end{itemize}
+
+\noindent\emph{Parameter Types}. In some situations we may hope to reuse an automaton or a system with the help of generalization. For example, an encrypted communication system supports different encryption algorithms encapsulated as parameter functions or components. Parameter types make it possible to take functions and entity interfaces as template parameters. \lang{} supports two parameter types: 
+\begin{enumerate}
+    \item \emph{Interface}, denoted by \texttt{interface (port$_1$:T$_1$,$\cdots,$port$_n$:T$_n$)}, defines a parameter that could be any \emph{automaton} or \emph{system} with exactly the same interface (i.e. number, types and directions of the ports perfectly match the declaration). Interfaces are only used in templates of \emph{system}s.
+    \item \emph{Function Type}, denoted by \texttt{func (arg$_1$:T$_1$,$\cdots, $arg$_n$:T$_n$):T}, defines a function that has the argument types $\texttt{T}_1,\cdots,\texttt{T}_n$ and result type \texttt{T}. Functions are permitted to appear in templates of \emph{other functions}, \emph{automata} and \emph{system}s.
+\end{enumerate}
+
+Parameter types can only be used in template parameters. It is impossible to declare a function or an interface as a local variable.
+
+\smalltitle{Functions} \lang{} supports two types of functions, \emph{common} functions and \emph{native} functions. The syntax of functions is shown as follows.
+
+\begin{bnf}
+    \ntsym{funcDecl} ::= & \tsym{native}^? \tsym{function} \ntsym{template}^? \ntsym{identifier} \ntsym{funcInterface} \tsym{\{} \\
+    & (\tsym{variables} \tsym{\{} \ntsym{varDecl}^* \tsym{\}})^? \\
+    & \tsym{statements} \tsym{\{} \ntsym{assignStmt}^* \ntsym{returnStmt} \tsym{\}} \\
+    \ntsym{funcInterface} ::= & \tsym{(} (\ntsym{identifier} \tsym{:} \ntsym{type})^* \tsym{)} \tsym{:} \ntsym{type}\\
+    \ntsym{assignStmt} ::= & \ntsym{term} (\tsym{,} \ntsym{term})^* \tsym{:=} \ntsym{term} (\tsym{,} \ntsym{term})^* \\
+    \ntsym{iteStmt} ::= & \ntsym{if} \tsym{(} \ntsym{term} \tsym{)} \ntsym{stmt}^+ (\tsym{else} \ntsym{stmt}^+)^? \\
+    \ntsym{returnStmt} ::= & \tsym{return} \ntsym{term} \\
+    \ntsym{varDecl} ::= & \ntsym{identifier} \tsym{:} \ntsym{type} (\tsym{init} \ntsym{term})^? 
+\end{bnf}
+
+
+Common functions are composed of \emph{function interfaces} and \emph{function bodies}. Function interfaces describe the input variables and return type of functions. Function bodies, including local variables and statements, specify the behavior of the functions. All user-defined functions are common functions.
+
+Native functions, on the other hand, have no function bodies but only function interfaces. Similar to the function declarations in other programming languages like C headers, native functions are part of the \lang{} plugins where the behavior of the functions cannot be described through \lang{} statements directly. For example, hardware-relevant operations, complex loops, etc. Such behavior can be captured by native codes in plugins. More discussions and examples of native functions will be presented in Section \ref{sec:codegen}.
+
+\smalltitle{Entities} Both automata and systems are called \emph{entities} in \lang{}. All \lang{} entities %, no matter automata or systems, 
+have their own templates and interfaces.  However, ways to formalize their behavior are complete different.
+
+\smalltitle{Automata} Syntax tree of automata is shown as follows.
+\begin{bnf}
+    \ntsym{automaton} ::=& \tsym{automaton}\ntsym{template}^?\ntsym{identifier} \tsym{(} \ntsym{port}^* \tsym{)} \tsym{\{}\\
+    & (\tsym{variables} \tsym{\{} \ntsym{varDecl}^* \tsym{\}})^? \\
+    & \tsym{transitions} \tsym{\{} \ntsym{transition}^* \tsym{\}} \tsym{\}} \\
+    \ntsym{port} ::=& \ntsym{identifier} \tsym{:} (\tsym{in}|\tsym{out}) \ntsym{type} \\
+    \ntsym{transition} ::=& \ntsym{guardedStmt} | \tsym{group} \tsym{\{} \ntsym{guardedStmt}^* \tsym{\}}\\
+    \ntsym{guardedStmt} ::=& \ntsym{term} \tsym{->} (\ntsym{stmt} | \tsym{\{} \ntsym{stmt}^* \tsym{\}}) \\
+    \ntsym{stmt} ::=& \ntsym{assignStmt} | \ntsym{iteStmt} | \tsym{sync} \ntsym{identifier}^+\\
+\end{bnf}
+
+As the basic behavior unit in \lang{}, \emph{automaton} consists of four parts: \emph{templates}, \emph{interfaces}, \emph{local variables} and \emph{transitions}, which are interpreted respectively as follows.
+\begin{enumerate}
+    \item \emph{Templates}. Templates of an automaton include a set of parameter declarations. A parameter can be either a type (common type or parameter type) or a value. Concrete values or types are supposed to be provided when the automaton is instantiated (i.e. declared in systems).
+    \item \emph{Interfaces}. Interfaces consist of directed ports and describe how automata interact with their contexts. Ports can be regarded as structures with three fields: \texttt{value}, \texttt{reqRead} and \texttt{reqWrite}, which correspondingly denote the values of parts, status of reading requests and status of writing requests.
+    \item \emph{Local Variables}. Each automaton contains a set of local variables. Types of these variables are supposed to be \emph{initialized}. We use the evaluations of local variables to represent states of an automaton.
+    \item \emph{Transitions.} Behavior of an automaton is depicted by guarded transitions. Each transition consists of a boolean term \emph{guard} and a sequence of statements. Transitions are ordered by their priority. For example, if multiple transitions are activated at the same time, the one that has highest priority will be fired. On the other hand, non-deterministic firing is also supported by encapsulating part of the transitions through \texttt{group}. 
+\end{enumerate}
+
+Currently, \lang{} supports three types of statements:
+\begin{enumerate}
+\item \emph{Assignment} statements, each including an expression and an optional assignment target, evaluate the expression and assign the result to its target if possible. 
+\item \emph{Ite} (if-then-else) statements act as conditional choice statements in other languages. 
+\item \emph{Synchronizing} statements, labelled with \texttt{sync}, are the flags requiring synchronized communication with other entities. 
+\end{enumerate}
+According to the existence of synchronizing statement (i.e. external communication through ports), transitions are classified as either \emph{internal} transitions or \emph{external} ones.
+
+Compared with automata models being widely-used in other formal tools (e.g. UPPAAL\cite{AmnellMovepUppaal2001}, Simulink/Stateflow\cite{hahn2016essentialsimulink}), an automata in \lang{} has no explicitly declared locations. Instead, it uses the evaluation of local variables to represent its states. An example of \lang{} automaton can be found in Example \ref{exp:automaton}, Section \ref{sec:experiment}, where automata are used to model drivers of motors.
+
+\begin{bnf}
+    \ntsym{system} ::= & \tsym{system} \ntsym{template}^?\ntsym{identifier} \tsym{(} \ntsym{port}^* \tsym{)} \tsym{\{}\\
+    & (\tsym{internals} \ntsym{identifier}^+)^? \\
+    & (\tsym{components} \tsym{\{} \ntsym{componentDecl}^* \tsym{\}})^? \\
+    & \tsym{connections} \tsym{\{} \ntsym{connectionDecl}^* \tsym{\}} \tsym{\}}\\
+    \ntsym{componentDecl} ::= & \ntsym{identifier}^+ \tsym{:} \ntsym{systemType} \\
+    \ntsym{connectionDecl} ::= & \ntsym{systemType} \ntsym{params} \tsym{(} \ntsym{portName}^+ \tsym{)}
+\end{bnf}
+
+\smalltitle{Systems} As the textual representation of hierarchical entities to organize sub-entities (automata and simpler systems), \emph{systems} with the above syntax tree are composed of:
+\begin{enumerate}
+    \item \emph{Components}. Entities can be placed and instantiated in systems as components. Each component is considered as a unique instance and executed in parallel with other components and connections. Ports of a component can be referenced by \texttt{identifier.portName} once the component is declared.
+    \item \emph{Connections}. Connections are used to connect \emph{a) the ports of the system itself, b) the ports of its components, and c) the internal nodes}. Inspired by the Reo project\cite{ArbabMscsReo2004,Arbab2007,BaierScp2006}, complex connection behavior can also be determined by other entities.
+    \item \emph{Internals}. Sometimes we need to combine multiple connections to perform more complex coordination behavior. Internal nodes, declared in \texttt{internals} segments, are untyped identifiers which are capable to weld two ports with consistent data-flow direction.
+\end{enumerate}
+
+Systems also have \emph{templates} and \emph{interfaces} which have exactly the same forms as in automata. An example of a \lang{} system is presented later in %Example \ref{exp:system}, 
+Section \ref{sec:experiment}.
+
+\subsection{Arduino}
+\label{subsec:arduino}
+
+Arduino\cite{margolis2011arduino} is an open-source electronics project that aims to build easy-to-use hardware and software. Arduino boards support various models of single-board micro-controllers, properly encapsulate them and expose a set of simple APIs to users. Here we give a brief introduction on program structure of Arduino C and hardware resources on a typical Arduino motherboard.
+
+\smalltitle{Program Structure}
+The Arduino community has developed a simple IDE that uses a dialect of C as its programming language. A typical Arduino C program describes its behavior through a \texttt{setup} function and a \texttt{loop} function. 
+%An example of Arduion C program is in Example \ref{exp:arduinoprog}.
+\begin{itemize}
+    \item \texttt{setup()}: This function is called once when a sketch starts after power-up or reset. It is used to initialize variables, input and output pin modes, and other libraries needed in the sketch.
+    \item \texttt{loop()}: After \texttt{setup} has been called, function \texttt{loop} is executed repeatedly in the main program. It controls the board until the board is powered off or is reset.
+\end{itemize}
+
+\smalltitle{Hardware Resources} Pins are the most import hardware resources of Arduino boards. Through them the motherboard communicates with its accessories, e.g. sensors, motors and other devices. Numbers and types of pins vary a lot between different Arduino motherboards. Here we take Arduino Uno, one of the most popular Arduino motherboards, as an example to introduce types of pins. This motherboard is also used for the case study in Section \ref{sec:experiment}.
+
+\begin{enumerate}
+    \item \emph{Analog Pins}: 6 analog pins named \texttt{A0 .. A5} are provided on Arduino Uno to perform analog signal transmission. Resolution of analog pins is 10 bits, in other words, value of an analog pin varies from $0$ to $1023$. Reading and writing operations on analogs pins are performed through builtin functions \texttt{analogRead(pin)} and \texttt{analogWrite(pin,value)}.
+    \item \emph{Digital Pins}: Digital pins have only two possible values $0$ and $1$, or \texttt{LOW} and \texttt{HIGH}. Builtin functions \texttt{digialRead} and \texttt{digitalWrite} are used to read values from and write values to digital pins. Moreover, part of the digital pins provide Pulse-Width Modulation (PWM, \cite{linkpwm}) feature to transfer analog value through binary encoding. In this case we are supposed to use \texttt{analogRead} and \texttt{analogWrite} instead.
+\end{enumerate}
+
+An Arduino pin can be in either \emph{INPUT} mode or \emph{OUTPUT} mode. Modes of pins, no matter whether they are analog or digital, are configured through the builtin function \texttt{pinMode(pin, mode)}.
+
+\CUT{
+\begin{example}[A Minimized Arduino C Program]
+    \label{exp:arduinoprog}
+    The following program from \cite{margolis2011arduino} flashes the onboard LED light periodically through changing the electronic level of pin 13.
+\begin{lstlisting}
+#define LED_PIN 13                  // Pin number attached to LED.
+
+void setup() {
+    pinMode(LED_PIN, OUTPUT);       // Set pin 13 as a digital output.
+}
+
+void loop() {
+    digitalWrite(LED_PIN, HIGH);    // Turn on the LED.
+    delay(1000);                    // Wait 1 second (1000 milliseconds).
+    digitalWrite(LED_PIN, LOW);     // Turn off the LED.
+    delay(1000);                    // Wait 1 second.
+}
+\end{lstlisting}
+\end{example}
+}

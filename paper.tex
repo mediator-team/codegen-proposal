@@ -1,0 +1,30 @@
+\documentclass{llncs}
+
+
+\input{common}
+\long\def\CUT#1{\marginpar{CUT}} \long\def\CUT#1{\relax}
+
+\title{Generating Arduino C Codes from \lang{}}
+\author{Yi Li\and Meng Sun}
+\institute{LMAM and Department of Informatics, School of Mathematical Sciences, \\ Peking University, Beijing, China \\
+\email{liyi\_math@pku.edu.cn, sunmeng@math.pku.edu.cn}
+}
+
+\begin{document}
+    \maketitle
+
+    \begin{abstract}
+        Manual encoding is exceedingly time consuming and error prone, and has become a huge obstacle between reliable software models and trustworthy computer programs. To deal with this problem, dozens of code generators are developed to automatically convert different models into executable codes. In this paper we present a new code generator for the component-based modeling language \lang{}. It aims to generate platform-dependent (Arduino in this case) programs that can be directly downloaded to the hardware without any manual adaption. We also present a case study where we use \lang{} to develop a wheeled-robot controller, generate the corresponding program through our code generator, which has been successfully executed on an Arduino-based robot platform.
+        \keywords{Code Generation, Mediator, Arduino, Component-based Modeling}
+    \end{abstract}
+    
+    \input{sections/introduction}
+    \input{sections/background}
+    \input{sections/codegenerator}
+    \input{sections/casestudy}
+    \input{sections/conclusion}
+
+    \bibliographystyle{splncs03}
+    \bibliography{library,local}    
+
+\end{document}

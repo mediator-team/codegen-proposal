@@ -1,0 +1,177 @@
+\section{Code Generation}
+\label{sec:codegen}
+
+In this section we introduce the Arduino code generator for \lang{}. The code generator mainly consists of a native function library and a set of generators for different \lang{} language elements, e.g. types, functions and entities.
+
+The Arduino code generator is implemented as a plugin of the \lang{} project \cite{medgit}, which is written in Java and based on Maven framework. Executable Jar packages and help documents can be found in this repository.
+
+\subsection{Native Functions}
+
+Native functions are the bridges between software controllers and hardware resources in the \lang{} framework. It tells \lang{} which and how the hardware resources can be operated. Similar to C/C++ header files, these native functions are declared in a \lang{} source file as a library. But their corresponding hardware behavior is defined by the code generator plugin.
+
+The Arduino code generator supports the following native functions:
+\begin{lstlisting}
+native function digitalRead (pin: int) : int 0..1;
+native function digitalWrite (pin: int, val:int 0..1);
+native function analogWrite (pin: int) : int 0..1023;
+native function analogWrite (pin: int, val:int 0..1023);
+native function delay (milliseconds: int);
+\end{lstlisting}
+\begin{itemize}
+    \item \emph{DigitalRead} reads binary signals from a digital pin.
+    \item \emph{DigitalWrite} writes binary signals to either a digital or an analog pin. When it is performed on an analog pin, it configures the analog electronic level to either $1023$ (\texttt{HIGH}) or $0$ (\texttt{LOW}).
+    \item \emph{AnalogRead} reads analog signals from an analog pin.
+    \item \emph{AnalogWrite} writes analog signals to either an analog pin or a digital pin that supports PWM encoding.
+    \item \emph{Delay} forces the Arduino processor to suspend for a certain time delay.
+\end{itemize}
+
+\subsection{Type Generator}
+
+Arduino C naturally supports most of the primitive types in Table \ref{table:primitivetypes} and part of the composite types in Table \ref{table:compositetypes}: unbounded integers \texttt{int}, float point numbers \texttt{double}, characters \texttt{char}, boolean values \texttt{bool} (as zero and non-zero integers), enumeration \texttt{enum}, union \texttt{union}, structure \texttt{struct} and finite arrays.
+
+For the other types that are not directly supported by Arduino C, we use an attached runtime library to simulate their behavior. Such types include:
+
+\begin{itemize}
+    \item \emph{Bounded Integer}. In \lang{}, bounded integers are mainly used to avoid overflow and unexpected values. For example, an Arduino analog signal varies between $0$ and $1023$, writing any other integers to an analog pin may lead to unknown behavior. Bounded integers are not supported by C. Moreover, according to its widely use we may suffer from performance degradation if we use complex structures to represent them. So we choose to generate assertions every time when a variable of bounded integer type is assigned. For example,
+    \begin{lstlisting}[language=C]
+int a = 0;  // type of a is int 0 .. 1 init 0
+void loop() {
+    // ...
+    a = 1 - a;
+    assert (a >= 0 && a <= 1);
+    // ...
+}
+    \end{lstlisting}
+    \item \emph{List}. C supports unbounded lists by pointers. However, C does not care about the capacity and consumption of them, which frequently lead to memory overflow and invalid dereference. In the \lang{} runtime library, we encapsulate a void pointer to represent an unbounded list, and two integer fields to denote its capacity and the number of items existing in this list.
+    \begin{lstlisting}
+struct __MR_List {
+    void * list;
+    int capacity;
+    int num_items;
+    int item_size;
+};
+typedef struct __MR_List MR_List;
+
+void init_empty_list (MR_List list, int item_size);
+void list_add (MR_List list, void * item);
+void * list_get (MR_List list, int index);
+void list_del (MR_List list, int index);
+    \end{lstlisting}
+    The definition of unbounded list, as shown here, is type-independent. In other words, when storing items to or obtaining items from an unbounded list, type casting is unavoidable. In this case the \lang{} syntax checker is responsible to guarantee the type consistency.
+    \item \emph{Map}. Similar to the \emph{list}, \lang{} \emph{map} in Arduino C is also type-independent. A map uses two unbounded lists to store keys and values, respectively.
+    \begin{lstlisting}
+struct __MR_Map {
+    MR_List keys;
+    MR_List values;
+};
+typedef struct __MR_Map MR_Map;
+
+void init_empty_map (MR_Map map, int key_size, int value_size);
+void map_put (MR_Map map, void * key, void * value);
+void * map_get (MR_Map map, void * key);
+void map_del (MR_Map map, void * key);      
+    \end{lstlisting}
+    \item \emph{Initialized}. In an Arduino program, default value of a type is only used in the \texttt{setup} function to initialize the corresponding variable. As a result, we do not have to use initialized type in Arduino C explicitly. For example, \texttt{int init 0} will be simply replaced by \texttt{int} when the Arduino C code is generated.
+\end{itemize}
+
+\subsection{Function Generator}
+
+As mentioned before, there are two types of functions to be considered here: common functions and native functions.
+
+\smalltitle{Common Functions} When designing \lang{}, we deliberately restrict the expressiveness of common functions (transitions as well) so that they are easier to be verified formally. As a result, common functions in \lang{} are very easy to be encoded in C.
+
+\smalltitle{Native Functions} When a native function is called in a transition, the code generator needs to replace the function with corresponding native API in Arduino C. According to Section \ref{subsec:arduino}, all native functions supported in this plugin can be mapped to an Arduino API with the same name.
+
+\subsection{Entity Generator}
+
+All Arduino motherboards are equipped with only one processor and there is no time-sharing operating system support. They do not support parallel execution. Consequently, typical \lang{} systems including a set of parallel components and connections can not be directly encoded in Arduino C.
+
+Fortunately, a scheduling algorithm that flats a hierarchical system into a single automaton has been introduced in \cite{LiFacsMediator2017}. The algorithm guarantees that its resulting automaton is always canonical, i.e., the automaton 
+contains exactly one transition group, in which all transitions are also canonical. With help of this algorithm, all we 
+need to do is to encode a single \lang{} automata in Arduino C. 
+
+The following steps illustrate the sketch of the encoding process.
+
+\begin{enumerate}
+    \item \emph{Template and Interface}. When generating Arduino codes, we always assume that the source automaton has NO template parameters and NO ports. Ports are special elements in \lang{} that are used to react with a \lang{} context. Behavior of ports are undeclared in the Arduino C context.
+    \item \emph{Local variables} are declared as global variables in Arduino C. According to \cite{LiFacsMediator2017}, types of all local variables should be initialized, i.e., they are declared with default values. And these default values will be assigned to the global variables in the \texttt{setup} function.
+    \item \emph{Statements}. Transitions are composed of sequences of statements. After being scheduled and canonicalized, an automaton contains only \emph{assignment statements} and \emph{ite statements} (which are inherently supported in C). Since we assume that no port exists in the automaton's interface, \emph{synchronizing statements} can be simply omitted. 
+    \item \emph{Transitions}. Transitions are \emph{activated} if their guards are satisfied by the current evaluation of the local variables. Since in a canonical automaton all transitions are encapsulated by a \texttt{group}, the transition selection process is fully non-deterministic, i.e. the transition to fire is randomly selected from all \emph{activated} transitions. In our approach, we use the following three steps to perform transition selection and firing:
+    \begin{itemize}
+        \item Step 1. \emph{Activation checking}. At the beginning of each \texttt{loop}, we use a set of \texttt{if} statements to check which transitions are activated under the current evaluation of local variables. We use an array \texttt{cmd\_activated} to store indexes of all transitions being activated.
+        \item Step 2. \emph{Random selection}. With the help of the \texttt{random} function in Arduino, it is easy to pick up a random index number from \texttt{cmd\_activated}.
+        \item Step 3. \emph{Transition firing}. Another set of \texttt{if} blocks are used to encode the statements in transitions. Conditions of these blocks are used to check whether index of this transition is equal to the selected index.
+    \end{itemize}
+\end{enumerate}
+
+\begin{example}
+    Consider a \lang{} automaton \texttt{test} with one local variable $x$ (initialized by $0$) and two transitions: increasing $x$ by $1$ if $x$ is less than zero, or decreasing $x$ by $1$ otherwise. The generated Arduino C code is as follows.
+    \begin{lstlisting}
+int test_x;
+int cmd; // stores the index of selected transition
+int cmd_activated[1]; // the capacity depends on number of transitions that belongs to the automaton
+
+void setup() { test_x = 0; }
+
+void loop() {
+    // STEP 1 collect activated transitions
+    cmd_activated_counter = 0; // the stack pointer of cmd_activated
+    if (test_x < 0) {
+        cmd_activated[cmd_activated_counter] = 0;
+        cmd_activated_counter ++;
+    }
+    if (test_x >= 0) {
+        cmd_activated[cmd_activated_counter] = 1;
+        cmd_activated_counter ++;
+    }
+
+    // STEP 2 pick up a transition randomly
+    cmd = cmd_activated[random(cmd_activated_counter)];
+
+    // STEP 3 fire the selected transition
+    if (cmd == 0) test_x = test_x + 1;
+    if (cmd == 1) test_x = test_x - 1;
+}
+    \end{lstlisting}
+\end{example}
+The code generating process is summarized in Algorithm \ref{alg:generate}.
+
+\begin{algorithm}[ht]
+    \caption{Generate Codes for a Specified Entity $E$ in a Program $P$}
+    \label{alg:generate}
+    \algsetup{linenosize=\small}
+    \small
+    \begin{algorithmic}[1]
+        \REQUIRE A program $P=\langle Typedefs, Functions, Automata, Systems\rangle$, an entity $E$
+        \ENSURE Arduino C codes
+        \STATE $global, setup, loop\leftarrow$ ``\; ''
+        \IF {$E\in Automata$}
+            \STATE $A \leftarrow \texttt{Canonicalize}(E)$
+        \ELSE
+            \STATE $A \leftarrow \texttt{Schedule}(E)$
+        \ENDIF
+        \IF {$A.Ports\neq\varnothing$}
+            \RETURN{NULL}
+        \ENDIF
+        \FOR {$var\in\{$local variables of $A\}$}
+            \STATE add variable declaration of $var$ to $global$ with the generated type
+            \STATE add variable initialization of $var$ to $setup$
+        \ENDFOR
+        
+        \FOR{$t=guard\rightarrow statements\in \{$transitions of $A\}$}
+            \STATE add activation checking of $guard$ to $loop$
+        \ENDFOR
+
+        \STATE add \emph{random index selection} to $loop$
+
+        \FOR{$t=guard\rightarrow statements\in \{$transitions of $A\}$}
+            \STATE add the generated $statements$ to $loop$
+            \IF {pin $pin$ is involved in $statements$}
+                \STATE add \texttt{pinMode} to $setup$ to configure $pin$ correctly
+            \ENDIF
+        \ENDFOR
+        \STATE $setup \leftarrow$ ``\texttt{void setup()\{}'' + $setup$ + ``\texttt{\}}''
+        \STATE $loop \leftarrow$ ``\texttt{void loop() \{}'' + $loop$ + ``\texttt{\}}''
+        \RETURN $global+setup+loop$
+    \end{algorithmic}
+\end{algorithm}

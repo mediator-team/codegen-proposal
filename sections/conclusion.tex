@@ -1,0 +1,13 @@
+\section{Conclusion and Future Work}
+\label{sec:conclusion}
+
+In this paper, we developed a fully-automatic code generator that converts \lang{} models to executable Arduino C programs. Compared with plain Arduino C code, component-based \lang{} models are more intuitive, easier to understand and construct. With the help of this code generator, engineers are able to build and review their models in \lang{}, and generate Arduino C code automatically to avoid errors caused by manual encoding.
+
+%\smalltitle{Future Work} Our future works are listed as follows.
+%\begin{enumerate}
+In the future we plan to use program verification tools to guarantee the reliability of generate codes.  Due to the complexity, it is hard to formally prove the correctness of the code generator itself. So we plan to generate assertions automatically and insert them into the target code for formal verification. Hopefully they can be verified through program verification tools, e.g. CBMC\cite{Clarke2004}.
+Providing support for more hardware platforms and languages, e.g. Verilog/VHDL, System C, etc., are in our scope as well.
+%\end{enumerate}
+
+\section*{Acknowledgement}
+The work was partially supported by the National Natural Science Foundation of China under grant no. 61772038, 61532019, 61202069 and 61272160.
